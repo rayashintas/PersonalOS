@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="id">
 <head>
@@ -7,6 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <script src="https://accounts.google.com/gsi/client" async defer></script>
+<script src="https://cdn.jsdelivr.net/npm/@azure/msal-browser@3/lib/msal-browser.min.js"></script>
 <style>
   :root{
     --bg:#F5F1EA;
@@ -205,6 +207,17 @@
   .task-text{flex:1; font-size:13.5px;}
   .task-remove{color:var(--text-faint); cursor:pointer; font-size:16px; padding:0 4px; line-height:1;}
   .task-empty{font-size:12.5px; color:var(--text-faint); padding:6px 2px;}
+  .due-badge{font-size:10px; font-weight:700; padding:2px 8px; border-radius:999px; margin-left:6px; white-space:nowrap;}
+  .due-badge.due-overdue{background:#FBE0E0; color:var(--red-dot);}
+  .due-badge.due-today{background:var(--card-pink-a); color:var(--pink-dot);}
+  .due-badge.due-soon{background:#FDF1E4; color:var(--orange-dot);}
+  .due-badge.due-future{background:var(--card-purple-a); color:var(--purple-dot);}
+  .due-badge.due-none{background:#F3F1EA; color:var(--text-faint);}
+  .due-badge{font-size:10px; font-weight:700; padding:2px 8px; border-radius:999px; margin-left:8px; white-space:nowrap;}
+  .due-badge.overdue{background:#FBE1E1; color:var(--red-dot);}
+  .due-badge.today{background:#FDF1E4; color:var(--orange-dot);}
+  .due-badge.soon{background:#E4F0FD; color:var(--blue-dot);}
+  .due-badge.future{background:#F1EEE6; color:var(--text-gray);}
 
   .habit-card{border:1.5px solid var(--border); border-radius:14px; padding:14px 16px; margin-bottom:10px;}
   .habit-header{display:flex; align-items:center; justify-content:space-between; gap:10px;}
@@ -231,6 +244,32 @@
   .appreciation-icon{font-size:30px; flex-shrink:0;}
   .appreciation-title{font-weight:800; font-size:15px; margin-bottom:4px;}
   .appreciation-text{font-size:13.5px; color:var(--text-dark); line-height:1.5;}
+
+  .flow-topbar{display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;}
+  .icon-btn{background:none; border:none; color:var(--text-gray); font-size:13px; font-weight:600; cursor:pointer; font-family:inherit; display:flex; align-items:center; gap:5px; padding:6px 10px; border-radius:10px;}
+  .icon-btn:hover{color:var(--pink); background:var(--pink-light);}
+
+  .hero-panel{border-radius:24px; padding:26px 26px 22px;}
+  .hero-panel.blue{background:linear-gradient(160deg, var(--card-blue-a), var(--card-blue-b));}
+  .hero-panel.gold{background:linear-gradient(160deg, var(--card-gold-a), var(--card-gold-b));}
+  .hero-top{display:flex; align-items:center; gap:24px; flex-wrap:wrap; margin-bottom:18px;}
+  .hero-ring{flex-shrink:0; line-height:0;}
+  .hero-title{font-size:19px; font-weight:800; margin-bottom:4px;}
+  .hero-caption{font-size:13.5px; color:var(--text-dark); max-width:360px; line-height:1.5;}
+  .hero-body{background:rgba(255,255,255,0.6); border-radius:16px; padding:16px 18px; margin-bottom:16px;}
+  .hero-section-label{font-size:11px; font-weight:700; color:var(--text-gray); text-transform:uppercase; letter-spacing:0.5px; margin:2px 0 8px;}
+  .hero-chart-wrap{background:rgba(255,255,255,0.6); border-radius:16px; padding:14px 18px 6px;}
+
+  .support-grid{display:grid; grid-template-columns:repeat(auto-fit, minmax(200px,1fr)); gap:14px; margin-bottom:22px;}
+  .support-card{border-radius:16px; padding:16px 18px; cursor:pointer;}
+  .support-card.pink{background:linear-gradient(160deg, var(--card-pink-a), var(--card-pink-b));}
+  .support-card.green{background:linear-gradient(160deg, var(--card-green-a), var(--card-green-b));}
+  .support-card.purple{background:linear-gradient(160deg, var(--card-purple-a), var(--card-purple-b));}
+  .support-label{font-size:10.5px; font-weight:700; color:var(--text-gray); text-transform:uppercase; letter-spacing:0.4px; margin-bottom:6px;}
+  .support-big{font-size:22px; font-weight:800; margin-bottom:2px;}
+  .support-caption{font-size:11.5px; color:var(--text-gray); margin-bottom:10px;}
+  .support-mini-row{display:flex; gap:8px; flex-wrap:wrap;}
+  .support-mini-item{font-size:11px; color:var(--text-dark); background:rgba(255,255,255,0.7); border-radius:8px; padding:4px 8px;}
 
   @media (max-width: 780px){
     .sidebar{display:none;}
@@ -279,6 +318,10 @@
 <!-- ============ MORNING: TO-DO + CALENDAR ============ -->
 <div id="screen-entry" class="center-screen hidden" style="align-items:flex-start;">
   <div class="entry-wrap" style="width:100%;">
+    <div class="flow-topbar">
+      <button class="icon-btn" onclick="exitEntryHome()">🏠 Home</button>
+      <div style="font-size:11.5px; color:var(--text-faint);">Progres otomatis tersimpan</div>
+    </div>
     <div class="entry-progress" id="entry-progress"></div>
 
     <div class="entry-step" data-step="0">
@@ -298,6 +341,7 @@
         <label class="field-label">Daftar task</label>
         <div class="task-add-row">
           <input type="text" id="f-newtask" placeholder="Tambahkan task...">
+          <input type="date" id="f-newtask-date" style="max-width:150px;">
           <button class="btn-secondary" onclick="addTask()">+ Tambah</button>
         </div>
         <div class="task-list" id="task-list-container"></div>
@@ -306,8 +350,8 @@
 
     <div class="entry-step hidden" data-step="1">
       <div class="entry-step-label">Kalender</div>
-      <div class="entry-question">Cek jadwalmu hari ini</div>
-      <div class="entry-help">Sambungkan Google Calendar di Pengaturan untuk lihat agenda otomatis, atau catat manual di bawah.</div>
+      <div class="entry-question">Cek jadwalmu minggu ini</div>
+      <div class="entry-help">Sambungkan Google Calendar di Pengaturan untuk lihat agenda 7 hari ke depan otomatis, atau catat manual di bawah.</div>
       <div id="calendar-step-content"></div>
       <div class="form-row" style="margin-top:14px;">
         <label class="field-label">Catatan agenda tambahan (opsional)</label>
@@ -332,6 +376,10 @@
 <!-- ============ EVENING: NUTRISI, AKTIVITAS, KEBIASAAN, MOOD, EVALUASI ============ -->
 <div id="screen-evening" class="center-screen hidden" style="align-items:flex-start;">
   <div class="entry-wrap" style="width:100%;">
+    <div class="flow-topbar">
+      <button class="icon-btn" onclick="exitEveningHome()">🏠 Home</button>
+      <div style="font-size:11.5px; color:var(--text-faint);">Progres otomatis tersimpan</div>
+    </div>
     <div class="entry-progress" id="evening-progress"></div>
 
     <div class="evening-step" data-estep="0">
@@ -475,6 +523,43 @@
       <button class="btn-primary" onclick="connectGoogleCalendar()">🔗 Hubungkan Google Calendar</button>
       <div class="status-text idle" id="calendar-status">Belum terhubung.</div>
     </div>
+
+    <div class="panel">
+      <div class="settings-section-title">✅ Microsoft To Do / Planner</div>
+      <div class="settings-section-desc">Untuk menggabungkan to-do list Personal OS dengan Microsoft To Do-mu. Butuh Application (client) ID dari Azure/Entra ID (lihat panduan di chat). Kalau pakai akun kerja Anteraja, mungkin perlu izin IT dulu.</div>
+      <div class="settings-row">
+        <input type="text" id="settings-ms-clientid" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx">
+        <button class="btn-secondary" onclick="saveMsClientIdSetting()">Simpan</button>
+      </div>
+      <button class="btn-primary" onclick="connectMicrosoftTodo()">🔗 Hubungkan Microsoft To Do</button>
+      <div class="status-text idle" id="ms-status">Belum terhubung.</div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">🔌 Status Integrasi</div>
+      <div class="integration-grid">
+        <div class="integration-card">
+          <div class="integration-name">MyFitnessPal (Nutrisi)</div>
+          <div class="integration-status"><span class="dot"></span>Manual Entry</div>
+          <div class="integration-note">API resmi MFP masih terbatas untuk developer yang disetujui — isi manual dulu.</div>
+        </div>
+        <div class="integration-card">
+          <div class="integration-name">Garmin (Aktivitas &amp; Recovery)</div>
+          <div class="integration-status"><span class="dot"></span>Manual Entry</div>
+          <div class="integration-note">Program developer Garmin mensyaratkan badan usaha resmi dan menolak akses personal.</div>
+        </div>
+        <div class="integration-card">
+          <div class="integration-name">Microsoft To Do / Planner (Kerja)</div>
+          <div class="integration-status"><span class="dot"></span>Atur di atas</div>
+          <div class="integration-note">Bisa disambungkan lewat Microsoft Graph API + akun Anteraja-mu — isi Client ID di bagian atas.</div>
+        </div>
+        <div class="integration-card">
+          <div class="integration-name">Google Calendar</div>
+          <div class="integration-status"><span class="dot"></span>Atur di atas</div>
+          <div class="integration-note">Bisa disambungkan lewat Google Calendar API — isi Client ID di bagian atas.</div>
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -506,15 +591,12 @@
 
     <div id="dash-banner"></div>
 
-    <div class="card-grid" id="card-grid"></div>
-
-    <div class="panel" id="panel-appreciation">
-      <div class="panel-title">🎉 Evaluasi Task Harian</div>
-      <div id="appreciation-dashboard"></div>
-    </div>
+    <div id="hero-kerja"></div>
+    <div id="hero-kebiasaan"></div>
+    <div class="support-grid" id="support-grid"></div>
 
     <div class="panel" id="panel-calendar">
-      <div class="panel-title">📅 Kalender Hari Ini</div>
+      <div class="panel-title">📅 Kalender 7 Hari</div>
       <div id="calendar-dashboard-content"></div>
     </div>
 
@@ -526,32 +608,6 @@
     <div class="panel" id="panel-reco">
       <div class="panel-title">🎯 Rekomendasi Hari Ini</div>
       <div id="reco-list"></div>
-    </div>
-
-    <div class="panel" id="panel-integrations">
-      <div class="panel-title">🔌 Status Integrasi</div>
-      <div class="integration-grid">
-        <div class="integration-card">
-          <div class="integration-name">MyFitnessPal (Nutrisi)</div>
-          <div class="integration-status"><span class="dot"></span>Manual Entry</div>
-          <div class="integration-note">API resmi MFP masih terbatas untuk developer yang disetujui — isi manual dulu.</div>
-        </div>
-        <div class="integration-card">
-          <div class="integration-name">Garmin (Aktivitas &amp; Recovery)</div>
-          <div class="integration-status"><span class="dot"></span>Manual Entry</div>
-          <div class="integration-note">Program developer Garmin mensyaratkan badan usaha resmi dan menolak akses personal.</div>
-        </div>
-        <div class="integration-card">
-          <div class="integration-name">Microsoft Planner (Kerja)</div>
-          <div class="integration-status"><span class="dot"></span>Manual Entry</div>
-          <div class="integration-note">Bisa disambungkan lewat Microsoft Graph API + akun Anteraja-mu (lihat panduan di chat).</div>
-        </div>
-        <div class="integration-card">
-          <div class="integration-name">Google Calendar</div>
-          <div class="integration-status"><span class="dot"></span>Atur di Pengaturan</div>
-          <div class="integration-note">Bisa disambungkan lewat Google Calendar API. Atur Client ID-mu di halaman Pengaturan.</div>
-        </div>
-      </div>
     </div>
 
     <div class="panel" id="panel-trend">
@@ -575,6 +631,12 @@ const TOTAL_EVENING_STEPS = 6;
 let googleAccessToken = null;
 let gisTokenClient = null;
 let lastFetchedEvents = null;
+
+let msalInstance = null;
+let msTaskToken = null;
+let msTodoTasks = null;
+let todoDropdownOpen = true;
+let plannerSheetTasks = null;
 
 const DEFAULT_TARGETS = { calories:2000, protein:120, carbs:250, fat:70, fiber:30, steps:8000, sleep:8 };
 const PREDEFINED_HABITS = [
@@ -600,6 +662,8 @@ function getSyncUrl(){ return localStorage.getItem('personalos_sync_url') || '';
 function setSyncUrl(url){ localStorage.setItem('personalos_sync_url', url.trim()); }
 function getGoogleClientId(){ return localStorage.getItem('personalos_google_client_id') || ''; }
 function setGoogleClientId(id){ localStorage.setItem('personalos_google_client_id', id.trim()); }
+function getMsClientId(){ return localStorage.getItem('personalos_ms_client_id') || ''; }
+function setMsClientId(id){ localStorage.setItem('personalos_ms_client_id', id.trim()); }
 
 async function syncSave(entry){
   const url = getSyncUrl();
@@ -625,6 +689,20 @@ async function syncLoadAndMerge(){
     localStorage.setItem('personalos_last_sync', new Date().toISOString());
   }catch(err){ /* silent fail */ }
 }
+async function fetchPlannerSheetTasks(){
+  const url = getSyncUrl();
+  if(!url || !currentUser){ plannerSheetTasks = []; return; }
+  plannerSheetTasks = null;
+  renderTodoPanel();
+  try{
+    const res = await fetch(`${url}?action=load_planner_tasks&user=${encodeURIComponent(currentUser)}`);
+    const data = await res.json();
+    plannerSheetTasks = data.tasks || [];
+  }catch(err){
+    plannerSheetTasks = [];
+  }
+  renderTodoPanel();
+}
 
 /* ---------------- Google Calendar (Google Identity Services) ---------------- */
 function initGoogleCalendar(){
@@ -638,7 +716,7 @@ function initGoogleCalendar(){
         googleAccessToken = resp.access_token;
         localStorage.setItem('personalos_google_connected','1');
         updateCalendarStatusText();
-        fetchTodayEvents();
+        fetchCalendarEvents();
       }
     }
   });
@@ -650,14 +728,14 @@ function connectGoogleCalendar(){
   if(!gisTokenClient) initGoogleCalendar();
   if(gisTokenClient) gisTokenClient.requestAccessToken();
 }
-async function fetchTodayEvents(){
+async function fetchCalendarEvents(){
   if(!googleAccessToken) return;
   lastFetchedEvents = null;
   renderCalendarStepContent();
   renderCalendarDashboard();
   const now = new Date();
   const start = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
-  const end = new Date(now.getFullYear(), now.getMonth(), now.getDate()+1).toISOString();
+  const end = new Date(now.getFullYear(), now.getMonth(), now.getDate()+7).toISOString();
   try{
     const res = await fetch(`https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${encodeURIComponent(start)}&timeMax=${encodeURIComponent(end)}&singleEvents=true&orderBy=startTime`, {
       headers: { Authorization: `Bearer ${googleAccessToken}` }
@@ -669,6 +747,30 @@ async function fetchTodayEvents(){
   }
   renderCalendarStepContent();
   renderCalendarDashboard();
+}
+function groupEventsByDay(events){
+  const map = {};
+  (events||[]).forEach(ev=>{
+    const dateStr = ev.start ? (ev.start.dateTime ? ev.start.dateTime.slice(0,10) : ev.start.date) : null;
+    if(!dateStr) return;
+    if(!map[dateStr]) map[dateStr] = [];
+    map[dateStr].push(ev);
+  });
+  return map;
+}
+function renderGroupedEvents(events){
+  if(!events || events.length===0) return `<div class="calendar-empty">Tidak ada agenda dalam 7 hari ke depan. 🎉</div>`;
+  const grouped = groupEventsByDay(events);
+  const dates = Object.keys(grouped).sort();
+  return dates.map(dateStr=>{
+    const d = new Date(dateStr+'T00:00:00');
+    const label = d.toLocaleDateString('id-ID',{weekday:'long', day:'numeric', month:'short'});
+    const items = grouped[dateStr].map(ev=>{
+      const startTime = ev.start && ev.start.dateTime ? new Date(ev.start.dateTime).toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'}) : 'Sepanjang hari';
+      return `<div class="calendar-event-item"><span>${ev.summary||'(tanpa judul)'}</span><span class="calendar-event-time">${startTime}</span></div>`;
+    }).join('');
+    return `<div style="margin-bottom:12px;"><div style="font-size:11.5px; font-weight:700; color:var(--text-gray); margin-bottom:6px; text-transform:capitalize;">${label}</div>${items}</div>`;
+  }).join('');
 }
 function renderCalendarStepContent(){
   const el = document.getElementById('calendar-step-content');
@@ -686,11 +788,7 @@ function renderCalendarStepContent(){
     return;
   }
   if(lastFetchedEvents===null){ el.innerHTML = `<div class="calendar-empty">Memuat agenda...</div>`; return; }
-  if(lastFetchedEvents.length===0){ el.innerHTML = `<div class="calendar-empty">Tidak ada agenda tercatat hari ini. 🎉</div>`; return; }
-  el.innerHTML = lastFetchedEvents.map(ev=>{
-    const startTime = ev.start && ev.start.dateTime ? new Date(ev.start.dateTime).toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'}) : 'Sepanjang hari';
-    return `<div class="calendar-event-item"><span>${ev.summary||'(tanpa judul)'}</span><span class="calendar-event-time">${startTime}</span></div>`;
-  }).join('');
+  el.innerHTML = renderGroupedEvents(lastFetchedEvents);
 }
 function renderCalendarDashboard(){
   const el = document.getElementById('calendar-dashboard-content');
@@ -698,18 +796,70 @@ function renderCalendarDashboard(){
   const e = todayEntry();
   const note = e && e.calendarCheck ? e.calendarCheck.note : '';
   let html = '';
-  if(googleAccessToken && lastFetchedEvents && lastFetchedEvents.length>0){
-    html += lastFetchedEvents.map(ev=>{
-      const startTime = ev.start && ev.start.dateTime ? new Date(ev.start.dateTime).toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'}) : 'Sepanjang hari';
-      return `<div class="calendar-event-item"><span>${ev.summary||'(tanpa judul)'}</span><span class="calendar-event-time">${startTime}</span></div>`;
-    }).join('');
-  } else if(googleAccessToken && lastFetchedEvents && lastFetchedEvents.length===0){
-    html += `<div class="calendar-empty">Tidak ada agenda tercatat hari ini.</div>`;
+  if(googleAccessToken && lastFetchedEvents!==null){
+    html += renderGroupedEvents(lastFetchedEvents);
   } else {
     html += `<div class="calendar-empty">Google Calendar belum terhubung. <span class="btn-ghost" style="cursor:pointer;" onclick="showSettings()">Atur di Pengaturan</span></div>`;
   }
   if(note){ html += `<div class="calendar-event-item"><span>📌 ${note}</span><span></span></div>`; }
   el.innerHTML = html;
+}
+
+/* ---------------- Microsoft To Do (MSAL.js) ---------------- */
+function initMsal(){
+  const clientId = getMsClientId();
+  if(!clientId || !window.msal) return null;
+  msalInstance = new msal.PublicClientApplication({
+    auth: { clientId, authority: 'https://login.microsoftonline.com/common', redirectUri: window.location.origin + window.location.pathname }
+  });
+  return msalInstance;
+}
+async function connectMicrosoftTodo(){
+  if(location.protocol==='file:'){ alert('Microsoft To Do hanya bisa disambungkan saat Personal OS diakses lewat alamat web (mis. GitHub Pages), bukan file lokal.'); return; }
+  if(!getMsClientId()){ alert('Isi Microsoft Client ID dulu di atas, lalu klik Simpan.'); return; }
+  if(!window.msal){ alert('Script Microsoft belum termuat. Coba refresh halaman.'); return; }
+  if(!msalInstance) initMsal();
+  if(!msalInstance){ alert('Gagal menyiapkan Microsoft login.'); return; }
+  try{
+    const loginResp = await msalInstance.loginPopup({ scopes:['Tasks.ReadWrite'] });
+    const tokenResp = await msalInstance.acquireTokenSilent({ scopes:['Tasks.ReadWrite'], account: loginResp.account });
+    msTaskToken = tokenResp.accessToken;
+    localStorage.setItem('personalos_ms_connected','1');
+    updateMsStatusText();
+    fetchMsTodoTasks();
+  }catch(err){
+    alert('Gagal menyambungkan Microsoft To Do: ' + (err && err.message ? err.message : err));
+  }
+}
+async function fetchMsTodoTasks(){
+  if(!msTaskToken) return;
+  msTodoTasks = null;
+  renderTodoPanel();
+  try{
+    const listsRes = await fetch('https://graph.microsoft.com/v1.0/me/todo/lists', { headers:{ Authorization:`Bearer ${msTaskToken}` } });
+    const listsData = await listsRes.json();
+    const lists = listsData.value || [];
+    const defaultList = lists.find(l=>l.wellknownListName==='defaultList') || lists[0];
+    if(!defaultList){ msTodoTasks = []; renderTodoPanel(); return; }
+    const tasksRes = await fetch(`https://graph.microsoft.com/v1.0/me/todo/lists/${defaultList.id}/tasks?$top=50`, { headers:{ Authorization:`Bearer ${msTaskToken}` } });
+    const tasksData = await tasksRes.json();
+    msTodoTasks = (tasksData.value || []).map(t=>({ listId: defaultList.id, taskId: t.id, text: t.title, done: t.status==='completed' }));
+  }catch(err){
+    msTodoTasks = [];
+  }
+  renderTodoPanel();
+}
+async function toggleMsTask(listId, taskId, currentDoneStr){
+  if(!msTaskToken) return;
+  const currentDone = currentDoneStr === 'true' || currentDoneStr === true;
+  try{
+    await fetch(`https://graph.microsoft.com/v1.0/me/todo/lists/${listId}/tasks/${taskId}`, {
+      method:'PATCH',
+      headers:{ Authorization:`Bearer ${msTaskToken}`, 'Content-Type':'application/json' },
+      body: JSON.stringify({ status: currentDone ? 'notStarted' : 'completed' })
+    });
+    fetchMsTodoTasks();
+  }catch(err){ alert('Gagal update task di Microsoft To Do.'); }
 }
 
 /* ---------------- Login ---------------- */
@@ -740,10 +890,21 @@ function logout(){
 
 /* ---------------- Morning: To-Do + Calendar ---------------- */
 function startEntry(){
-  entryDraft = { work:{ tasks: [], priority:'', workload:null }, calendarCheck:{ note:'' } };
+  const existing = todayEntry();
+  entryDraft = {
+    work: existing && existing.work ? JSON.parse(JSON.stringify(existing.work)) : { tasks: [], priority:'', workload:null },
+    calendarCheck: existing && existing.calendarCheck ? JSON.parse(JSON.stringify(existing.calendarCheck)) : { note:'' }
+  };
+  if(!entryDraft.work.tasks) entryDraft.work.tasks = [];
   entryStep = 0;
-  document.querySelectorAll('#f-priority,#f-newtask,#f-calendarnote').forEach(el=>el.value='');
+  document.getElementById('f-priority').value = entryDraft.work.priority || '';
+  document.getElementById('f-newtask').value = '';
+  document.getElementById('f-calendarnote').value = entryDraft.calendarCheck.note || '';
   document.querySelectorAll('#screen-entry .chip.selected').forEach(el=>el.classList.remove('selected'));
+  if(entryDraft.work.workload){
+    const chip = document.querySelector(`#screen-entry .chip[data-group="workload"][data-val="${entryDraft.work.workload}"]`);
+    if(chip) chip.classList.add('selected');
+  }
   hideAllScreens();
   document.getElementById('screen-entry').classList.remove('hidden');
   renderTaskList();
@@ -777,12 +938,34 @@ function getChipVal(group){
   return el ? el.getAttribute('data-val') : null;
 }
 
+function dueBadge(dateStr){
+  if(!dateStr) return '';
+  const due = new Date(dateStr+'T00:00:00');
+  const today = new Date(); today.setHours(0,0,0,0);
+  const diffDays = Math.round((due-today)/(1000*60*60*24));
+  let label, cls;
+  if(diffDays<0){ label='Terlambat'; cls='overdue'; }
+  else if(diffDays===0){ label='Hari ini'; cls='today'; }
+  else if(diffDays===1){ label='Besok'; cls='soon'; }
+  else { label = due.toLocaleDateString('id-ID',{day:'numeric',month:'short'}); cls='future'; }
+  return `<span class="due-badge ${cls}">${label}</span>`;
+}
+function sortByDue(tasks){
+  return [...tasks].sort((a,b)=>{
+    if(!a.due && !b.due) return 0;
+    if(!a.due) return 1;
+    if(!b.due) return -1;
+    return a.due.localeCompare(b.due);
+  });
+}
 function addTask(){
   const input = document.getElementById('f-newtask');
+  const dateInput = document.getElementById('f-newtask-date');
   const text = input.value.trim();
   if(!text) return;
-  entryDraft.work.tasks.push({ id:'t'+Date.now()+Math.random().toString(36).slice(2,6), text, done:false });
+  entryDraft.work.tasks.push({ id:'t'+Date.now()+Math.random().toString(36).slice(2,6), text, done:false, due: dateInput.value || null });
   input.value = '';
+  dateInput.value = '';
   renderTaskList();
 }
 function toggleTask(id){
@@ -796,12 +979,12 @@ function removeTask(id){
 }
 function renderTaskList(){
   const el = document.getElementById('task-list-container');
-  const tasks = entryDraft.work.tasks || [];
+  const tasks = sortByDue(entryDraft.work.tasks || []);
   if(tasks.length===0){ el.innerHTML = `<div class="task-empty">Belum ada task ditambahkan.</div>`; return; }
   el.innerHTML = tasks.map(t=>`
     <div class="task-item ${t.done?'done':''}">
       <div class="task-checkbox ${t.done?'checked':''}" onclick="toggleTask('${t.id}')">${t.done?'✓':''}</div>
-      <div class="task-text">${t.text}</div>
+      <div class="task-text">${t.text}${dueBadge(t.due)}</div>
       <div class="task-remove" onclick="removeTask('${t.id}')">×</div>
     </div>
   `).join('');
@@ -1036,14 +1219,201 @@ function saveEvening(){
   goToDashboard();
 }
 
+/* ---------------- To-Do list (manual + Microsoft To Do, live update) ---------------- */
+function toggleDashboardManualTask(id){
+  const entries = loadEntries();
+  const today = new Date().toISOString().slice(0,10);
+  const idx = entries.findIndex(e=>e.date===today);
+  if(idx<0) return;
+  const t = (entries[idx].work && entries[idx].work.tasks || []).find(t=>t.id===id);
+  if(t){ t.done = !t.done; saveEntries(entries); syncSave(entries[idx]); }
+  renderDashboard();
+}
+function toggleDashboardHabit(key){
+  const entries = loadEntries();
+  const today = new Date().toISOString().slice(0,10);
+  const idx = entries.findIndex(e=>e.date===today);
+  if(idx<0) return;
+  if(!entries[idx].habits) entries[idx].habits = { reading:{done:false,note:''}, podcast:{done:false,note:''}, article:{done:false,note:''}, custom:[] };
+  entries[idx].habits[key].done = !entries[idx].habits[key].done;
+  saveEntries(entries);
+  syncSave(entries[idx]);
+  renderDashboard();
+}
+function toggleDashboardCustomHabit(id){
+  const entries = loadEntries();
+  const today = new Date().toISOString().slice(0,10);
+  const idx = entries.findIndex(e=>e.date===today);
+  if(idx<0) return;
+  const h = (entries[idx].habits && entries[idx].habits.custom || []).find(h=>h.id===id);
+  if(h){ h.done = !h.done; saveEntries(entries); syncSave(entries[idx]); }
+  renderDashboard();
+}
+function addQuickTask(){
+  const input = document.getElementById('quick-task-input');
+  const dateInput = document.getElementById('quick-task-date');
+  const text = input.value.trim();
+  if(!text) return;
+  const entries = loadEntries();
+  const today = new Date().toISOString().slice(0,10);
+  let idx = entries.findIndex(e=>e.date===today);
+  if(idx<0){ entries.push({ date: today, work:{ tasks:[], priority:'', workload:null } }); idx = entries.length-1; }
+  if(!entries[idx].work) entries[idx].work = { tasks:[], priority:'', workload:null };
+  if(!entries[idx].work.tasks) entries[idx].work.tasks = [];
+  entries[idx].work.tasks.push({ id:'t'+Date.now()+Math.random().toString(36).slice(2,6), text, done:false, due: dateInput.value || null });
+  saveEntries(entries);
+  syncSave(entries[idx]);
+  input.value = '';
+  dateInput.value = '';
+  renderDashboard();
+}
+function renderTodoPanel(){
+  const el = document.getElementById('todo-panel-content');
+  if(!el) return;
+  const e = todayEntry();
+  const manualTasks = sortByDue((e && e.work && e.work.tasks) || []);
+
+  let html = `<div class="task-add-row"><input type="text" id="quick-task-input" placeholder="Tambah task cepat..."><input type="date" id="quick-task-date" style="max-width:150px;"><button class="btn-secondary" onclick="addQuickTask()">+ Tambah</button></div>`;
+
+  html += `<div class="hero-section-label" style="margin-top:12px;">MANUAL</div>`;
+  if(manualTasks.length===0){
+    html += `<div class="task-empty">Belum ada task manual.</div>`;
+  } else {
+    html += `<div class="task-list">` + manualTasks.map(t=>`
+      <div class="task-item ${t.done?'done':''}">
+        <div class="task-checkbox ${t.done?'checked':''}" onclick="toggleDashboardManualTask('${t.id}')">${t.done?'✓':''}</div>
+        <div class="task-text">${t.text}${dueBadge(t.due)}</div>
+      </div>
+    `).join('') + `</div>`;
+  }
+
+  html += `<div class="hero-section-label">MICROSOFT TO DO</div>`;
+  if(!getMsClientId()){
+    html += `<div class="task-empty">Belum disambungkan. <span class="btn-ghost" style="cursor:pointer;" onclick="showSettings()">Atur di Pengaturan</span></div>`;
+  } else if(!msTaskToken){
+    html += `<div class="task-empty">Client ID sudah diisi, tapi belum terhubung. <span class="btn-ghost" style="cursor:pointer;" onclick="showSettings()">Hubungkan di Pengaturan</span></div>`;
+  } else if(msTodoTasks===null){
+    html += `<div class="task-empty">Memuat task...</div>`;
+  } else if(msTodoTasks.length===0){
+    html += `<div class="task-empty">Tidak ada task aktif di Microsoft To Do.</div>`;
+  } else {
+    html += `<div class="task-list">` + msTodoTasks.map(t=>`
+      <div class="task-item ${t.done?'done':''}">
+        <div class="task-checkbox ${t.done?'checked':''}" onclick="toggleMsTask('${t.listId}','${t.taskId}', '${t.done}')">${t.done?'✓':''}</div>
+        <div class="task-text">${t.text}</div>
+      </div>
+    `).join('') + `</div>`;
+  }
+
+  html += `<div class="hero-section-label">MICROSOFT PLANNER (via Power Automate)</div>`;
+  if(!getSyncUrl()){
+    html += `<div class="task-empty">Sinkronisasi Sheets belum diatur. <span class="btn-ghost" style="cursor:pointer;" onclick="showSettings()">Atur di Pengaturan</span></div>`;
+  } else if(plannerSheetTasks===null){
+    html += `<div class="task-empty">Memuat task...</div>`;
+  } else if(plannerSheetTasks.length===0){
+    html += `<div class="task-empty">Belum ada task masuk dari Planner. Pastikan flow Power Automate sudah aktif.</div>`;
+  } else {
+    const sorted = [...plannerSheetTasks].sort((a,b)=>{
+      if(!a.dueDate) return 1;
+      if(!b.dueDate) return -1;
+      return new Date(a.dueDate) - new Date(b.dueDate);
+    });
+    html += `<div class="task-list">` + sorted.map(t=>{
+      const due = formatPlannerDueLabel(t.dueDate);
+      return `
+      <div class="task-item ${t.status==='completed'?'done':''}">
+        <div class="task-checkbox ${t.status==='completed'?'checked':''}" style="cursor:default;">${t.status==='completed'?'✓':''}</div>
+        <div class="task-text">${t.title} <span class="due-badge ${due.cls}">${due.label}</span></div>
+      </div>`;
+    }).join('') + `</div>`;
+  }
+  el.innerHTML = html;
+}
+
+/* ---------------- Progress rings & weekly charts ---------------- */
+function progressRingSVG(pct, color, size, strokeWidth){
+  size = size || 120; strokeWidth = strokeWidth || 12;
+  const r = (size - strokeWidth) / 2;
+  const c = 2 * Math.PI * r;
+  const clamped = Math.min(100, Math.max(0, pct||0));
+  const offset = c - (clamped/100) * c;
+  return `
+    <svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
+      <circle cx="${size/2}" cy="${size/2}" r="${r}" fill="none" stroke="rgba(255,255,255,0.7)" stroke-width="${strokeWidth}"/>
+      <circle cx="${size/2}" cy="${size/2}" r="${r}" fill="none" stroke="${color}" stroke-width="${strokeWidth}"
+        stroke-dasharray="${c}" stroke-dashoffset="${offset}" stroke-linecap="round"
+        transform="rotate(-90 ${size/2} ${size/2})" style="transition: stroke-dashoffset .4s ease;"/>
+      <text x="50%" y="50%" text-anchor="middle" dominant-baseline="central" font-size="${size*0.22}" font-weight="800" fill="#1E1B2E">${clamped}%</text>
+    </svg>
+  `;
+}
+function weeklyLineSVG(values, color){
+  const width = 320, height = 90;
+  if(!values || values.length===0) return `<div class="trend-empty">Belum ada data 7 hari terakhir.</div>`;
+  const stepX = values.length>1 ? width/(values.length-1) : width;
+  const pts = values.map((v,i)=>{
+    const x = values.length>1 ? i*stepX : width/2;
+    const y = height - (Math.min(100,Math.max(0,v))/100)*height + 8;
+    return {x,y};
+  });
+  const points = pts.map(p=>`${p.x},${p.y}`).join(' ');
+  const dots = pts.map(p=>`<circle cx="${p.x}" cy="${p.y}" r="4" fill="${color}"/>`).join('');
+  return `<svg width="100%" height="${height+16}" viewBox="0 0 ${width} ${height+16}" preserveAspectRatio="none" style="overflow:visible;">
+    <polyline points="${points}" fill="none" stroke="${color}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+    ${dots}
+  </svg>`;
+}
+function last7DaysTaskCompletion(){
+  return loadEntries().slice(-7).map(e=>{
+    const tasks = (e.work && e.work.tasks) || [];
+    if(tasks.length===0) return 0;
+    return Math.round((tasks.filter(t=>t.done).length/tasks.length)*100);
+  });
+}
+function last7DaysHabitCompletion(){
+  return loadEntries().slice(-7).map(e=>{
+    const hc = habitCounts(e.habits);
+    if(hc.total===0) return 0;
+    return Math.round((hc.done/hc.total)*100);
+  });
+}
+function formatPlannerDueLabel(dueDate){
+  if(!dueDate) return {label:'Tanpa tanggal', cls:'due-none'};
+  const d = new Date(dueDate);
+  if(isNaN(d.getTime())) return {label:'Tanpa tanggal', cls:'due-none'};
+  const now = new Date();
+  const todayStr = now.toISOString().slice(0,10);
+  const dStr = d.toISOString().slice(0,10);
+  if(dStr < todayStr) return {label:'Terlambat · '+d.toLocaleDateString('id-ID',{day:'numeric',month:'short'}), cls:'due-overdue'};
+  if(dStr === todayStr) return {label:'Hari ini', cls:'due-today'};
+  const tomorrow = new Date(now); tomorrow.setDate(now.getDate()+1);
+  if(dStr === tomorrow.toISOString().slice(0,10)) return {label:'Besok', cls:'due-soon'};
+  return {label:d.toLocaleDateString('id-ID',{day:'numeric',month:'short'}), cls:'due-future'};
+}
+
+
 /* ---------------- Settings screen ---------------- */
 function showSettings(){
   hideAllScreens();
   document.getElementById('screen-settings').classList.remove('hidden');
   document.getElementById('settings-sync-url').value = getSyncUrl();
   document.getElementById('settings-google-clientid').value = getGoogleClientId();
+  document.getElementById('settings-ms-clientid').value = getMsClientId();
   updateSyncStatusText();
   updateCalendarStatusText();
+  updateMsStatusText();
+}
+function saveMsClientIdSetting(){
+  setMsClientId(document.getElementById('settings-ms-clientid').value);
+  msalInstance = null;
+  updateMsStatusText('Client ID disimpan.');
+}
+function updateMsStatusText(msg){
+  const el = document.getElementById('ms-status');
+  if(!el) return;
+  const connected = !!msTaskToken || localStorage.getItem('personalos_ms_connected')==='1';
+  el.textContent = msg || (connected ? 'Terhubung ke Microsoft To Do.' : 'Belum terhubung.');
+  el.className = 'status-text ' + (connected ? 'ok' : 'idle');
 }
 function saveSyncUrlSetting(){
   setSyncUrl(document.getElementById('settings-sync-url').value);
@@ -1085,11 +1455,46 @@ function goToDashboard(){
   document.getElementById('dash-name').textContent = currentUser;
   document.getElementById('dash-date').textContent = 'Ringkasan hari ini · ' + new Date().toLocaleDateString('id-ID', {weekday:'long', day:'numeric', month:'long', year:'numeric'});
   document.getElementById('avatar-initial').textContent = currentUser.trim().charAt(0).toUpperCase();
+  fetchPlannerSheetTasks();
   renderDashboard();
 }
 function scrollToId(id){ document.getElementById(id).scrollIntoView({behavior:'smooth'}); }
 function startEntryAtStep(n){ startEntry(); entryStep = n; renderProgress(); showStep(n); }
 function startEveningAtStep(n){ startEvening(); eveningStep = n; renderEveningProgress(); showEveningStep(n); }
+
+function exitEntryHome(){
+  collectStep(entryStep);
+  const entries = loadEntries();
+  const today = new Date().toISOString().slice(0,10);
+  const idx = entries.findIndex(e=>e.date===today);
+  const base = idx>=0 ? entries[idx] : { date: today };
+  const record = { ...base, date: today };
+  if(entryStep>=0) record.work = entryDraft.work;
+  if(entryStep>=1) record.calendarCheck = entryDraft.calendarCheck;
+  if(idx>=0) entries[idx]=record; else entries.push(record);
+  saveEntries(entries);
+  syncSave(record);
+  goToDashboard();
+}
+function exitEveningHome(){
+  collectEveningStep(eveningStep);
+  const entries = loadEntries();
+  const today = new Date().toISOString().slice(0,10);
+  const idx = entries.findIndex(e=>e.date===today);
+  const base = idx>=0 ? entries[idx] : { date: today };
+  const record = { ...base, date: today };
+  const maxStep = eveningStep;
+  if(maxStep>=0) record.nutrition = eveningDraft.nutrition;
+  if(maxStep>=1){ record.foodRating = eveningDraft.foodRating; record.foodNote = eveningDraft.foodNote; }
+  if(maxStep>=2) record.activity = eveningDraft.activity;
+  if(maxStep>=3) record.habits = eveningDraft.habits;
+  if(maxStep>=4) record.mood = eveningDraft.mood;
+  if(maxStep>=5) record.dayNote = eveningDraft.dayNote;
+  if(idx>=0) entries[idx]=record; else entries.push(record);
+  saveEntries(entries);
+  syncSave(record);
+  goToDashboard();
+}
 
 function todayEntry(){
   const entries = loadEntries();
@@ -1134,78 +1539,82 @@ function renderDashboard(){
     bannerEl.innerHTML = '';
   }
 
-  document.getElementById('card-grid').innerHTML = `
-    <div class="stat-card blue">
-      <div class="stat-badge"><span class="dot"></span>Kerja</div>
-      <div class="stat-label">Task Selesai</div>
-      <div class="stat-big">${totalTasks>0 ? `${doneTasks}/${totalTasks}` : '—'}</div>
-      <div class="stat-caption">${w.workload ? `workload: ${({low:'Rendah',medium:'Sedang',high:'Tinggi'})[w.workload]}` : 'Belum ada data hari ini'}</div>
-      <div class="stat-mini-grid">
-        <div class="stat-mini" style="grid-column:1/3;"><div class="stat-mini-val" style="font-size:13px;">${w.priority || '-'}</div><div class="stat-mini-label">Prioritas Utama</div></div>
+  document.getElementById('hero-kerja').innerHTML = `
+    <div class="hero-panel blue">
+      <div class="hero-top">
+        <div class="hero-ring">${progressRingSVG(taskPct||0, 'var(--blue-dot)')}</div>
+        <div>
+          <div class="hero-title">💼 Kerja &amp; To-Do</div>
+          <div class="hero-caption">${(taskAppreciation(doneTasks,totalTasks)).text}</div>
+        </div>
       </div>
-      <div class="stat-detail-link" onclick="startEntryAtStep(0)">Isi / Update →</div>
+      <div class="hero-body" id="todo-panel-content"></div>
+      <div class="hero-chart-wrap">
+        <div class="hero-section-label">Penyelesaian Task — 7 Hari</div>
+        ${weeklyLineSVG(last7DaysTaskCompletion(), 'var(--blue-dot)')}
+      </div>
     </div>
+  `;
+  renderTodoPanel();
 
-    <div class="stat-card pink">
-      <div class="stat-badge"><span class="dot"></span>Nutrisi</div>
-      <div class="stat-label">Kalori Hari Ini</div>
-      <div class="stat-big">${calPct!=null ? calPct+'%' : '—'}</div>
-      <div class="stat-caption">${calPct!=null ? `dari target ${t.calories} kkal` : 'Diisi saat evaluasi malam'}</div>
-      <div class="stat-mini-grid">
-        <div class="stat-mini"><div class="stat-mini-val">${n.calories||0}</div><div class="stat-mini-label">Kalori</div></div>
-        <div class="stat-mini"><div class="stat-mini-val">${n.protein||0}g</div><div class="stat-mini-label">Protein</div></div>
-        <div class="stat-mini"><div class="stat-mini-val">${n.carbs||0}g</div><div class="stat-mini-label">Karbo</div></div>
-        <div class="stat-mini"><div class="stat-mini-val">${n.fat||0}g</div><div class="stat-mini-label">Lemak</div></div>
+  let habitListHtml = '';
+  PREDEFINED_HABITS.forEach(h=>{
+    const done = habits && habits[h.key] && habits[h.key].done;
+    habitListHtml += `<div class="task-item ${done?'done':''}">
+      <div class="task-checkbox ${done?'checked':''}" onclick="toggleDashboardHabit('${h.key}')">${done?'✓':''}</div>
+      <div class="task-text">${h.icon} ${h.name}</div>
+    </div>`;
+  });
+  (habits && habits.custom || []).forEach(h=>{
+    habitListHtml += `<div class="task-item ${h.done?'done':''}">
+      <div class="task-checkbox ${h.done?'checked':''}" onclick="toggleDashboardCustomHabit('${h.id}')">${h.done?'✓':''}</div>
+      <div class="task-text">✨ ${h.text}</div>
+    </div>`;
+  });
+  document.getElementById('hero-kebiasaan').innerHTML = `
+    <div class="hero-panel gold">
+      <div class="hero-top">
+        <div class="hero-ring">${progressRingSVG(habitPct||0, 'var(--gold-dot)')}</div>
+        <div>
+          <div class="hero-title">🌱 Kebiasaan Hari Ini</div>
+          <div class="hero-caption">Melatih badan &amp; pikiran — klik untuk menandai selesai kapan saja, tak perlu tunggu evaluasi malam.</div>
+        </div>
       </div>
-      <div class="stat-detail-link" onclick="startEveningAtStep(0)">Isi / Update →</div>
-    </div>
-
-    <div class="stat-card green">
-      <div class="stat-badge"><span class="dot"></span>Aktivitas</div>
-      <div class="stat-label">Langkah Hari Ini</div>
-      <div class="stat-big">${stepPct!=null ? stepPct+'%' : '—'}</div>
-      <div class="stat-caption">${stepPct!=null ? `dari target ${t.steps} langkah` : 'Diisi saat evaluasi malam'}</div>
-      <div class="stat-mini-grid">
-        <div class="stat-mini"><div class="stat-mini-val">${a.steps||0}</div><div class="stat-mini-label">Langkah</div></div>
-        <div class="stat-mini"><div class="stat-mini-val">${a.sleep||0}j</div><div class="stat-mini-label">Tidur</div></div>
-        <div class="stat-mini"><div class="stat-mini-val">${a.exercise==='yes'?'Ya':'Tidak'}</div><div class="stat-mini-label">Olahraga</div></div>
-        <div class="stat-mini"><div class="stat-mini-val">${a.activeCalories||0}</div><div class="stat-mini-label">Kal. Aktif</div></div>
+      <div class="hero-body"><div class="task-list">${habitListHtml || '<div class="task-empty">Belum ada kebiasaan.</div>'}</div></div>
+      <div class="hero-chart-wrap">
+        <div class="hero-section-label">Konsistensi — 7 Hari</div>
+        ${weeklyLineSVG(last7DaysHabitCompletion(), 'var(--gold-dot)')}
       </div>
-      <div class="stat-detail-link" onclick="startEveningAtStep(2)">Isi / Update →</div>
-    </div>
-
-    <div class="stat-card gold">
-      <div class="stat-badge"><span class="dot"></span>Kebiasaan</div>
-      <div class="stat-label">Terpenuhi Hari Ini</div>
-      <div class="stat-big">${e && e.eveningCompleted ? `${hc.done}/${hc.total}` : '—'}</div>
-      <div class="stat-caption">${e && e.eveningCompleted ? 'melatih badan & pikiran' : 'Diisi saat evaluasi malam'}</div>
-      <div class="stat-mini-grid">
-        <div class="stat-mini"><div class="stat-mini-val">${habits && habits.reading && habits.reading.done ? '✓' : '–'}</div><div class="stat-mini-label">Baca</div></div>
-        <div class="stat-mini"><div class="stat-mini-val">${habits && habits.podcast && habits.podcast.done ? '✓' : '–'}</div><div class="stat-mini-label">Podcast</div></div>
-        <div class="stat-mini"><div class="stat-mini-val">${habits && habits.article && habits.article.done ? '✓' : '–'}</div><div class="stat-mini-label">Artikel</div></div>
-        <div class="stat-mini"><div class="stat-mini-val">${habits ? (habits.custom||[]).filter(h=>h.done).length : 0}</div><div class="stat-mini-label">Lainnya</div></div>
-      </div>
-      <div class="stat-detail-link" onclick="startEveningAtStep(3)">Isi / Update →</div>
-    </div>
-
-    <div class="stat-card purple">
-      <div class="stat-badge"><span class="dot"></span>Mood &amp; Wellness</div>
-      <div class="stat-label">Skor Wellness</div>
-      <div class="stat-big">${overall!=null ? overall+'%' : '—'}</div>
-      <div class="stat-caption">${overall!=null ? 'gabungan semua domain hari ini' : 'Belum ada data hari ini'}</div>
-      <div class="stat-mini-grid">
-        <div class="stat-mini"><div class="stat-mini-val">${m.weather||'-'}</div><div class="stat-mini-label">Mood</div></div>
-        <div class="stat-mini"><div class="stat-mini-val">${sleepScore!=null ? sleepScore+'%' : '-'}</div><div class="stat-mini-label">Skor Tidur</div></div>
-      </div>
-      <div class="stat-detail-link" onclick="startEveningAtStep(4)">Isi / Update →</div>
     </div>
   `;
 
-  const ap = taskAppreciation(doneTasks, totalTasks);
-  document.getElementById('appreciation-dashboard').innerHTML = `
-    <div class="appreciation-card" style="margin-bottom:0;">
-      <div class="appreciation-icon">${ap.icon}</div>
-      <div><div class="appreciation-title">${ap.title}</div><div class="appreciation-text">${ap.text}</div></div>
+  document.getElementById('support-grid').innerHTML = `
+    <div class="support-card pink" onclick="startEveningAtStep(0)">
+      <div class="support-label">Nutrisi</div>
+      <div class="support-big">${calPct!=null ? calPct+'%' : '—'}</div>
+      <div class="support-caption">${calPct!=null ? `${n.calories||0} kkal dari ${t.calories}` : 'Diisi saat evaluasi malam'}</div>
+      <div class="support-mini-row">
+        <div class="support-mini-item">Protein ${n.protein||0}g</div>
+        <div class="support-mini-item">Karbo ${n.carbs||0}g</div>
+      </div>
+    </div>
+    <div class="support-card green" onclick="startEveningAtStep(2)">
+      <div class="support-label">Aktivitas</div>
+      <div class="support-big">${stepPct!=null ? stepPct+'%' : '—'}</div>
+      <div class="support-caption">${stepPct!=null ? `${a.steps||0} langkah` : 'Diisi saat evaluasi malam'}</div>
+      <div class="support-mini-row">
+        <div class="support-mini-item">Tidur ${a.sleep||0}j</div>
+        <div class="support-mini-item">${a.exercise==='yes' ? 'Olahraga ✓' : 'Belum olahraga'}</div>
+      </div>
+    </div>
+    <div class="support-card purple" onclick="startEveningAtStep(4)">
+      <div class="support-label">Mood &amp; Wellness</div>
+      <div class="support-big">${overall!=null ? overall+'%' : '—'}</div>
+      <div class="support-caption">${m.weather || 'Diisi saat evaluasi malam'}</div>
+      <div class="support-mini-row">
+        <div class="support-mini-item">Mood ${m.weather||'-'}</div>
+        <div class="support-mini-item">Skor tidur ${sleepScore!=null ? sleepScore+'%' : '-'}</div>
+      </div>
     </div>
   `;
 
