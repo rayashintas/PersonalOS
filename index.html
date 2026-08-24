@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="id">
 <head>
@@ -8,7 +7,6 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <script src="https://accounts.google.com/gsi/client" async defer></script>
-<script src="https://cdn.jsdelivr.net/npm/@azure/msal-browser@3/lib/msal-browser.min.js"></script>
 <style>
   :root{
     --bg:#F5F1EA;
@@ -525,17 +523,6 @@
     </div>
 
     <div class="panel">
-      <div class="settings-section-title">✅ Microsoft To Do / Planner</div>
-      <div class="settings-section-desc">Untuk menggabungkan to-do list Personal OS dengan Microsoft To Do-mu. Butuh Application (client) ID dari Azure/Entra ID (lihat panduan di chat). Kalau pakai akun kerja Anteraja, mungkin perlu izin IT dulu.</div>
-      <div class="settings-row">
-        <input type="text" id="settings-ms-clientid" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx">
-        <button class="btn-secondary" onclick="saveMsClientIdSetting()">Simpan</button>
-      </div>
-      <button class="btn-primary" onclick="connectMicrosoftTodo()">🔗 Hubungkan Microsoft To Do</button>
-      <div class="status-text idle" id="ms-status">Belum terhubung.</div>
-    </div>
-
-    <div class="panel">
       <div class="panel-title">🔌 Status Integrasi</div>
       <div class="integration-grid">
         <div class="integration-card">
@@ -549,9 +536,9 @@
           <div class="integration-note">Program developer Garmin mensyaratkan badan usaha resmi dan menolak akses personal.</div>
         </div>
         <div class="integration-card">
-          <div class="integration-name">Microsoft To Do / Planner (Kerja)</div>
-          <div class="integration-status"><span class="dot"></span>Atur di atas</div>
-          <div class="integration-note">Bisa disambungkan lewat Microsoft Graph API + akun Anteraja-mu — isi Client ID di bagian atas.</div>
+          <div class="integration-name">Microsoft Planner (Kerja)</div>
+          <div class="integration-status"><span class="dot"></span>via Power Automate</div>
+          <div class="integration-note">Task masuk otomatis lewat flow Power Automate → Google Sheets, pakai URL Sheets sync yang sama di atas.</div>
         </div>
         <div class="integration-card">
           <div class="integration-name">Google Calendar</div>
@@ -632,9 +619,6 @@ let googleAccessToken = null;
 let gisTokenClient = null;
 let lastFetchedEvents = null;
 
-let msalInstance = null;
-let msTaskToken = null;
-let msTodoTasks = null;
 let todoDropdownOpen = true;
 let plannerSheetTasks = null;
 
@@ -662,8 +646,6 @@ function getSyncUrl(){ return localStorage.getItem('personalos_sync_url') || '';
 function setSyncUrl(url){ localStorage.setItem('personalos_sync_url', url.trim()); }
 function getGoogleClientId(){ return localStorage.getItem('personalos_google_client_id') || ''; }
 function setGoogleClientId(id){ localStorage.setItem('personalos_google_client_id', id.trim()); }
-function getMsClientId(){ return localStorage.getItem('personalos_ms_client_id') || ''; }
-function setMsClientId(id){ localStorage.setItem('personalos_ms_client_id', id.trim()); }
 
 async function syncSave(entry){
   const url = getSyncUrl();
@@ -735,7 +717,7 @@ async function fetchCalendarEvents(){
   renderCalendarDashboard();
   const now = new Date();
   const start = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
-  const end = new Date(now.getFullYear(), now.getMonth(), now.getDate()+7).toISOString();
+  const end = new Date(now.getFullYear(), now.getMonth(), now.getDate()+8).toISOString();
   try{
     const res = await fetch(`https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${encodeURIComponent(start)}&timeMax=${encodeURIComponent(end)}&singleEvents=true&orderBy=startTime`, {
       headers: { Authorization: `Bearer ${googleAccessToken}` }
@@ -803,63 +785,6 @@ function renderCalendarDashboard(){
   }
   if(note){ html += `<div class="calendar-event-item"><span>📌 ${note}</span><span></span></div>`; }
   el.innerHTML = html;
-}
-
-/* ---------------- Microsoft To Do (MSAL.js) ---------------- */
-function initMsal(){
-  const clientId = getMsClientId();
-  if(!clientId || !window.msal) return null;
-  msalInstance = new msal.PublicClientApplication({
-    auth: { clientId, authority: 'https://login.microsoftonline.com/common', redirectUri: window.location.origin + window.location.pathname }
-  });
-  return msalInstance;
-}
-async function connectMicrosoftTodo(){
-  if(location.protocol==='file:'){ alert('Microsoft To Do hanya bisa disambungkan saat Personal OS diakses lewat alamat web (mis. GitHub Pages), bukan file lokal.'); return; }
-  if(!getMsClientId()){ alert('Isi Microsoft Client ID dulu di atas, lalu klik Simpan.'); return; }
-  if(!window.msal){ alert('Script Microsoft belum termuat. Coba refresh halaman.'); return; }
-  if(!msalInstance) initMsal();
-  if(!msalInstance){ alert('Gagal menyiapkan Microsoft login.'); return; }
-  try{
-    const loginResp = await msalInstance.loginPopup({ scopes:['Tasks.ReadWrite'] });
-    const tokenResp = await msalInstance.acquireTokenSilent({ scopes:['Tasks.ReadWrite'], account: loginResp.account });
-    msTaskToken = tokenResp.accessToken;
-    localStorage.setItem('personalos_ms_connected','1');
-    updateMsStatusText();
-    fetchMsTodoTasks();
-  }catch(err){
-    alert('Gagal menyambungkan Microsoft To Do: ' + (err && err.message ? err.message : err));
-  }
-}
-async function fetchMsTodoTasks(){
-  if(!msTaskToken) return;
-  msTodoTasks = null;
-  renderTodoPanel();
-  try{
-    const listsRes = await fetch('https://graph.microsoft.com/v1.0/me/todo/lists', { headers:{ Authorization:`Bearer ${msTaskToken}` } });
-    const listsData = await listsRes.json();
-    const lists = listsData.value || [];
-    const defaultList = lists.find(l=>l.wellknownListName==='defaultList') || lists[0];
-    if(!defaultList){ msTodoTasks = []; renderTodoPanel(); return; }
-    const tasksRes = await fetch(`https://graph.microsoft.com/v1.0/me/todo/lists/${defaultList.id}/tasks?$top=50`, { headers:{ Authorization:`Bearer ${msTaskToken}` } });
-    const tasksData = await tasksRes.json();
-    msTodoTasks = (tasksData.value || []).map(t=>({ listId: defaultList.id, taskId: t.id, text: t.title, done: t.status==='completed' }));
-  }catch(err){
-    msTodoTasks = [];
-  }
-  renderTodoPanel();
-}
-async function toggleMsTask(listId, taskId, currentDoneStr){
-  if(!msTaskToken) return;
-  const currentDone = currentDoneStr === 'true' || currentDoneStr === true;
-  try{
-    await fetch(`https://graph.microsoft.com/v1.0/me/todo/lists/${listId}/tasks/${taskId}`, {
-      method:'PATCH',
-      headers:{ Authorization:`Bearer ${msTaskToken}`, 'Content-Type':'application/json' },
-      body: JSON.stringify({ status: currentDone ? 'notStarted' : 'completed' })
-    });
-    fetchMsTodoTasks();
-  }catch(err){ alert('Gagal update task di Microsoft To Do.'); }
 }
 
 /* ---------------- Login ---------------- */
@@ -1287,24 +1212,6 @@ function renderTodoPanel(){
     `).join('') + `</div>`;
   }
 
-  html += `<div class="hero-section-label">MICROSOFT TO DO</div>`;
-  if(!getMsClientId()){
-    html += `<div class="task-empty">Belum disambungkan. <span class="btn-ghost" style="cursor:pointer;" onclick="showSettings()">Atur di Pengaturan</span></div>`;
-  } else if(!msTaskToken){
-    html += `<div class="task-empty">Client ID sudah diisi, tapi belum terhubung. <span class="btn-ghost" style="cursor:pointer;" onclick="showSettings()">Hubungkan di Pengaturan</span></div>`;
-  } else if(msTodoTasks===null){
-    html += `<div class="task-empty">Memuat task...</div>`;
-  } else if(msTodoTasks.length===0){
-    html += `<div class="task-empty">Tidak ada task aktif di Microsoft To Do.</div>`;
-  } else {
-    html += `<div class="task-list">` + msTodoTasks.map(t=>`
-      <div class="task-item ${t.done?'done':''}">
-        <div class="task-checkbox ${t.done?'checked':''}" onclick="toggleMsTask('${t.listId}','${t.taskId}', '${t.done}')">${t.done?'✓':''}</div>
-        <div class="task-text">${t.text}</div>
-      </div>
-    `).join('') + `</div>`;
-  }
-
   html += `<div class="hero-section-label">MICROSOFT PLANNER (via Power Automate)</div>`;
   if(!getSyncUrl()){
     html += `<div class="task-empty">Sinkronisasi Sheets belum diatur. <span class="btn-ghost" style="cursor:pointer;" onclick="showSettings()">Atur di Pengaturan</span></div>`;
@@ -1313,19 +1220,13 @@ function renderTodoPanel(){
   } else if(plannerSheetTasks.length===0){
     html += `<div class="task-empty">Belum ada task masuk dari Planner. Pastikan flow Power Automate sudah aktif.</div>`;
   } else {
-    const sorted = [...plannerSheetTasks].sort((a,b)=>{
-      if(!a.dueDate) return 1;
-      if(!b.dueDate) return -1;
-      return new Date(a.dueDate) - new Date(b.dueDate);
-    });
-    html += `<div class="task-list">` + sorted.map(t=>{
-      const due = formatPlannerDueLabel(t.dueDate);
-      return `
+    const sorted = sortByDue(plannerSheetTasks.map(t=>({ ...t, due: t.dueDate ? String(t.dueDate).slice(0,10) : null })));
+    html += `<div class="task-list">` + sorted.map(t=>`
       <div class="task-item ${t.status==='completed'?'done':''}">
         <div class="task-checkbox ${t.status==='completed'?'checked':''}" style="cursor:default;">${t.status==='completed'?'✓':''}</div>
-        <div class="task-text">${t.title} <span class="due-badge ${due.cls}">${due.label}</span></div>
-      </div>`;
-    }).join('') + `</div>`;
+        <div class="task-text">${t.title}${dueBadge(t.due)}</div>
+      </div>
+    `).join('') + `</div>`;
   }
   el.innerHTML = html;
 }
@@ -1377,19 +1278,7 @@ function last7DaysHabitCompletion(){
     return Math.round((hc.done/hc.total)*100);
   });
 }
-function formatPlannerDueLabel(dueDate){
-  if(!dueDate) return {label:'Tanpa tanggal', cls:'due-none'};
-  const d = new Date(dueDate);
-  if(isNaN(d.getTime())) return {label:'Tanpa tanggal', cls:'due-none'};
-  const now = new Date();
-  const todayStr = now.toISOString().slice(0,10);
-  const dStr = d.toISOString().slice(0,10);
-  if(dStr < todayStr) return {label:'Terlambat · '+d.toLocaleDateString('id-ID',{day:'numeric',month:'short'}), cls:'due-overdue'};
-  if(dStr === todayStr) return {label:'Hari ini', cls:'due-today'};
-  const tomorrow = new Date(now); tomorrow.setDate(now.getDate()+1);
-  if(dStr === tomorrow.toISOString().slice(0,10)) return {label:'Besok', cls:'due-soon'};
-  return {label:d.toLocaleDateString('id-ID',{day:'numeric',month:'short'}), cls:'due-future'};
-}
+
 
 
 /* ---------------- Settings screen ---------------- */
@@ -1398,22 +1287,8 @@ function showSettings(){
   document.getElementById('screen-settings').classList.remove('hidden');
   document.getElementById('settings-sync-url').value = getSyncUrl();
   document.getElementById('settings-google-clientid').value = getGoogleClientId();
-  document.getElementById('settings-ms-clientid').value = getMsClientId();
   updateSyncStatusText();
   updateCalendarStatusText();
-  updateMsStatusText();
-}
-function saveMsClientIdSetting(){
-  setMsClientId(document.getElementById('settings-ms-clientid').value);
-  msalInstance = null;
-  updateMsStatusText('Client ID disimpan.');
-}
-function updateMsStatusText(msg){
-  const el = document.getElementById('ms-status');
-  if(!el) return;
-  const connected = !!msTaskToken || localStorage.getItem('personalos_ms_connected')==='1';
-  el.textContent = msg || (connected ? 'Terhubung ke Microsoft To Do.' : 'Belum terhubung.');
-  el.className = 'status-text ' + (connected ? 'ok' : 'idle');
 }
 function saveSyncUrlSetting(){
   setSyncUrl(document.getElementById('settings-sync-url').value);
