@@ -579,13 +579,14 @@
     <div id="dash-banner"></div>
 
     <div id="hero-kerja"></div>
-    <div id="hero-kebiasaan"></div>
-    <div class="support-grid" id="support-grid"></div>
 
     <div class="panel" id="panel-calendar">
       <div class="panel-title">📅 Kalender 7 Hari</div>
       <div id="calendar-dashboard-content"></div>
     </div>
+
+    <div id="hero-kebiasaan"></div>
+    <div class="support-grid" id="support-grid"></div>
 
     <div class="panel hidden" id="panel-evening-summary">
       <div class="panel-title">🌙 Evaluasi Malam</div>
@@ -708,7 +709,16 @@ function connectGoogleCalendar(){
   if(!getGoogleClientId()){ alert('Isi Google Client ID dulu di atas, lalu klik Simpan.'); return; }
   if(!window.google || !google.accounts){ alert('Google script belum termuat. Coba refresh halaman.'); return; }
   if(!gisTokenClient) initGoogleCalendar();
-  if(gisTokenClient) gisTokenClient.requestAccessToken();
+  if(gisTokenClient) gisTokenClient.requestAccessToken({ prompt: 'consent' });
+}
+function autoConnectGoogleCalendar(){
+  if(location.protocol==='file:') return;
+  if(!getGoogleClientId()) return;
+  if(localStorage.getItem('personalos_google_connected')!=='1') return;
+  if(!window.google || !google.accounts) return;
+  if(!gisTokenClient) initGoogleCalendar();
+  if(!gisTokenClient) return;
+  try{ gisTokenClient.requestAccessToken({ prompt: '' }); }catch(err){ /* stay disconnected until she clicks manually */ }
 }
 async function fetchCalendarEvents(){
   if(!googleAccessToken) return;
@@ -794,6 +804,7 @@ function handleLogin(){
   currentUser = name;
   localStorage.setItem('personalos_last_user', name);
   if(getSyncUrl()) syncLoadAndMerge();
+  autoConnectGoogleCalendar();
   showChoice();
 }
 function hideAllScreens(){
@@ -1387,8 +1398,12 @@ function renderDashboard(){
   const habits = (e && e.habits) || null;
 
   const tasks = w.tasks || [];
-  const doneTasks = tasks.filter(x=>x.done).length;
-  const totalTasks = tasks.length;
+  const doneManualTasks = tasks.filter(x=>x.done).length;
+  const totalManualTasks = tasks.length;
+  const donePlannerTasks = (plannerSheetTasks||[]).filter(x=>x.status==='completed').length;
+  const totalPlannerTasks = (plannerSheetTasks||[]).length;
+  const doneTasks = doneManualTasks + donePlannerTasks;
+  const totalTasks = totalManualTasks + totalPlannerTasks;
   const hc = habitCounts(habits);
 
   const calPct = n.calories!=null ? Math.min(100, Math.round(((n.calories||0)/t.calories)*100)) : null;
