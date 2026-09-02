@@ -661,6 +661,10 @@
 
     <h1 class="page-title">Selamat datang, <span id="dash-name"></span></h1>
     <div class="page-sub" id="dash-date"></div>
+    <div class="settings-row" style="max-width:280px; align-items:center;">
+      <input type="date" id="dashboard-date-picker" onchange="changeDashboardDate(this.value)">
+      <button class="btn-secondary" onclick="changeDashboardDate(todayStr())">Hari Ini</button>
+    </div>
 
     <div id="dash-banner"></div>
 
@@ -694,6 +698,10 @@
 <script>
 /* ---------------- State ---------------- */
 let currentUser = null;
+/* ---- Isi sekali di sini supaya device/browser BARU otomatis tersambung tanpa perlu buka Pengaturan ---- */
+const DEFAULT_SYNC_URL = '';         // tempel Web App URL Apps Script kamu di sini
+const DEFAULT_GOOGLE_CLIENT_ID = ''; // tempel Google Client ID kamu di sini (opsional)
+
 let selectedDate = new Date().toISOString().slice(0,10);
 function todayStr(){ return new Date().toISOString().slice(0,10); }
 function updateSelectedDate(val){ selectedDate = val || todayStr(); }
@@ -730,10 +738,9 @@ function saveEntries(entries){ localStorage.setItem(userKey('entries'), JSON.str
 function loadManualTasks(){
   try{ return JSON.parse(localStorage.getItem(userKey('manual_tasks')) || '[]'); }catch(e){ return []; }
 }
-function saveManualTasks(tasks){ localStorage.setItem(userKey('manual_tasks'), JSON.stringify(tasks)); }
+function saveManualTasks(tasks){ localStorage.setItem(userKey('manual_tasks'), JSON.stringify(tasks)); syncSaveKV('manual_tasks', tasks); }
 function visibleManualTasks(){
-  const today = new Date().toISOString().slice(0,10);
-  return loadManualTasks().filter(t => !t.done || t.completedDate === today);
+  return loadManualTasks().filter(t => !t.done || t.completedDate === selectedDate);
 }
 function addManualTask(text, due){
   const tasks = loadManualTasks();
@@ -764,7 +771,7 @@ function dailyTaskTargetStats(dateStr){
 function loadInsights(){
   try{ return JSON.parse(localStorage.getItem(userKey('insights')) || '[]'); }catch(e){ return []; }
 }
-function saveInsights(list){ localStorage.setItem(userKey('insights'), JSON.stringify(list)); }
+function saveInsights(list){ localStorage.setItem(userKey('insights'), JSON.stringify(list)); syncSaveKV('insights', list); }
 function addInsightNote(){
   const source = getChipVal('insightsource') || 'Lainnya';
   const title = document.getElementById('insight-title').value.trim();
@@ -934,9 +941,9 @@ function loadTargets(){
 }
 
 /* ---------------- Sync settings (Google Sheets via Apps Script) ---------------- */
-function getSyncUrl(){ return localStorage.getItem('personalos_sync_url') || ''; }
+function getSyncUrl(){ return localStorage.getItem('personalos_sync_url') || DEFAULT_SYNC_URL; }
 function setSyncUrl(url){ localStorage.setItem('personalos_sync_url', url.trim()); }
-function getGoogleClientId(){ return localStorage.getItem('personalos_google_client_id') || ''; }
+function getGoogleClientId(){ return localStorage.getItem('personalos_google_client_id') || DEFAULT_GOOGLE_CLIENT_ID; }
 function setGoogleClientId(id){ localStorage.setItem('personalos_google_client_id', id.trim()); }
 
 async function syncSave(entry){
@@ -962,6 +969,38 @@ async function syncLoadAndMerge(){
     saveEntries(merged);
     localStorage.setItem('personalos_last_sync', new Date().toISOString());
   }catch(err){ /* silent fail */ }
+}
+async function syncSaveKV(key, valueObj){
+  const url = getSyncUrl();
+  if(!url || !currentUser) return;
+  try{
+    await fetch(url, { method:'POST', body: JSON.stringify({ action:'save_kv', user: currentUser, key, value: JSON.stringify(valueObj) }) });
+  }catch(err){ /* silent fail */ }
+}
+async function syncLoadKV(key){
+  const url = getSyncUrl();
+  if(!url || !currentUser) return null;
+  try{
+    const res = await fetch(`${url}?action=load_kv&user=${encodeURIComponent(currentUser)}&key=${encodeURIComponent(key)}`);
+    const data = await res.json();
+    return data.value ? JSON.parse(data.value) : null;
+  }catch(err){ return null; }
+}
+async function syncManualTasksAndInsights(){
+  const remoteTasks = await syncLoadKV('manual_tasks');
+  if(remoteTasks){
+    const local = loadManualTasks();
+    const map = {}; local.forEach(t=>map[t.id]=t); remoteTasks.forEach(t=>map[t.id]=t);
+    localStorage.setItem(userKey('manual_tasks'), JSON.stringify(Object.values(map)));
+  }
+  const remoteInsights = await syncLoadKV('insights');
+  if(remoteInsights){
+    const local = loadInsights();
+    const map = {}; local.forEach(n=>map[n.id]=n); remoteInsights.forEach(n=>map[n.id]=n);
+    localStorage.setItem(userKey('insights'), JSON.stringify(Object.values(map)));
+  }
+  syncSaveKV('manual_tasks', loadManualTasks());
+  syncSaveKV('insights', loadInsights());
 }
 async function fetchPlannerSheetTasks(){
   const url = getSyncUrl();
@@ -1109,7 +1148,7 @@ function renderCalendarStepContent(){
 function renderCalendarDashboard(){
   const el = document.getElementById('calendar-dashboard-content');
   if(!el) return;
-  const e = todayEntry();
+  const e = entryForDate(selectedDate);
   const note = e && e.calendarCheck ? e.calendarCheck.note : '';
   let html = '';
   if(googleAccessToken && lastFetchedEvents!==null){
@@ -1128,7 +1167,7 @@ function handleLogin(){
   currentUser = name;
   selectedDate = todayStr();
   localStorage.setItem('personalos_last_user', name);
-  if(getSyncUrl()) syncLoadAndMerge();
+  if(getSyncUrl()){ syncLoadAndMerge(); syncManualTasksAndInsights(); }
   autoConnectGoogleCalendar();
   showChoice();
 }
@@ -1489,8 +1528,7 @@ function toggleDashboardManualTask(id){
 }
 function toggleDashboardHabit(key){
   const entries = loadEntries();
-  const today = new Date().toISOString().slice(0,10);
-  const idx = entries.findIndex(e=>e.date===today);
+  const idx = entries.findIndex(e=>e.date===selectedDate);
   if(idx<0) return;
   if(!entries[idx].habits) entries[idx].habits = { reading:{done:false,note:''}, podcast:{done:false,note:''}, article:{done:false,note:''}, custom:[] };
   entries[idx].habits[key].done = !entries[idx].habits[key].done;
@@ -1500,8 +1538,7 @@ function toggleDashboardHabit(key){
 }
 function toggleDashboardCustomHabit(id){
   const entries = loadEntries();
-  const today = new Date().toISOString().slice(0,10);
-  const idx = entries.findIndex(e=>e.date===today);
+  const idx = entries.findIndex(e=>e.date===selectedDate);
   if(idx<0) return;
   const h = (entries[idx].habits && entries[idx].habits.custom || []).find(h=>h.id===id);
   if(h){ h.done = !h.done; saveEntries(entries); syncSave(entries[idx]); }
@@ -1637,6 +1674,7 @@ async function manualSyncNow(){
   if(!getSyncUrl()){ el.textContent = 'Isi URL Web App dulu di atas.'; el.className='status-text error'; return; }
   el.textContent = 'Menyinkronkan...'; el.className = 'status-text idle';
   await syncLoadAndMerge();
+  await syncManualTasksAndInsights();
   const entries = loadEntries();
   for(const entry of entries){ await syncSave(entry); }
   updateSyncStatusText();
@@ -1659,9 +1697,14 @@ function goToDashboard(){
   hideAllScreens();
   document.getElementById('screen-dashboard').classList.remove('hidden');
   document.getElementById('dash-name').textContent = currentUser;
-  document.getElementById('dash-date').textContent = 'Ringkasan hari ini · ' + new Date().toLocaleDateString('id-ID', {weekday:'long', day:'numeric', month:'long', year:'numeric'});
+  document.getElementById('dashboard-date-picker').value = selectedDate;
   document.getElementById('avatar-initial').textContent = currentUser.trim().charAt(0).toUpperCase();
   fetchPlannerSheetTasks();
+  renderDashboard();
+}
+function changeDashboardDate(val){
+  selectedDate = val || todayStr();
+  document.getElementById('dashboard-date-picker').value = selectedDate;
   renderDashboard();
 }
 function scrollToId(id){ document.getElementById(id).scrollIntoView({behavior:'smooth'}); }
@@ -1710,15 +1753,18 @@ function todayEntry(){
 
 function renderDashboard(){
   const t = loadTargets();
-  const e = todayEntry();
+  const e = entryForDate(selectedDate);
   const n = (e && e.nutrition) || {};
   const a = (e && e.activity) || {};
   const w = (e && e.work) || {};
   const m = (e && e.mood) || {};
   const habits = (e && e.habits) || null;
 
-  const todayD = todayStr();
-  const dailyTarget = dailyTaskTargetStats(todayD);
+  const isToday = selectedDate === todayStr();
+  const dateLabel = new Date(selectedDate+'T00:00:00').toLocaleDateString('id-ID', {weekday:'long', day:'numeric', month:'long', year:'numeric'});
+  document.getElementById('dash-date').textContent = (isToday ? 'Ringkasan hari ini · ' : 'Menampilkan · ') + dateLabel;
+
+  const dailyTarget = dailyTaskTargetStats(selectedDate);
   const doneTasks = dailyTarget.done;
   const totalTasks = dailyTarget.total;
   const hc = habitCounts(habits);
