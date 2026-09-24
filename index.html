@@ -538,6 +538,17 @@
     </div>
 
     <div class="panel">
+      <div class="settings-section-title">📋 OD Planner</div>
+      <div class="settings-section-desc">Tempel link Google Sheet OD Planner (harus sudah "Anyone with the link" bisa lihat). Task yang PIC-nya namamu dan belum "Done" akan otomatis muncul di To-Do List.</div>
+      <div class="settings-row">
+        <input type="text" id="settings-od-planner-url" placeholder="https://docs.google.com/spreadsheets/d/xxx/edit?gid=xxx">
+        <button class="btn-secondary" onclick="saveOdPlannerUrlSetting()">Simpan</button>
+      </div>
+      <button class="btn-primary" onclick="fetchOdPlannerTasks()">🔄 Tarik Ulang Task</button>
+      <div class="status-text idle" id="od-planner-status">Sudah diisi bawaan dari sheet OD Planner-mu.</div>
+    </div>
+
+    <div class="panel">
       <div class="panel-title">🔌 Status Integrasi</div>
       <div class="integration-grid">
         <div class="integration-card">
@@ -551,9 +562,9 @@
           <div class="integration-note">Program developer Garmin mensyaratkan badan usaha resmi dan menolak akses personal.</div>
         </div>
         <div class="integration-card">
-          <div class="integration-name">Microsoft Planner (Kerja)</div>
-          <div class="integration-status"><span class="dot"></span>via Power Automate</div>
-          <div class="integration-note">Task masuk otomatis lewat flow Power Automate → Google Sheets, pakai URL Sheets sync yang sama di atas.</div>
+          <div class="integration-name">OD Planner (Kerja)</div>
+          <div class="integration-status"><span class="dot"></span>Terhubung (read-only)</div>
+          <div class="integration-note">Ditarik langsung dari Google Sheet OD Hub, difilter berdasarkan nama PIC dan status belum Done.</div>
         </div>
         <div class="integration-card">
           <div class="integration-name">Google Calendar</div>
@@ -597,6 +608,29 @@
       <div class="form-row"><label class="field-label">Judul</label><input type="text" id="insight-title" placeholder="Judul podcast / artikel / buku"></div>
       <div class="form-row"><label class="field-label">Insight-nya apa?</label><textarea id="insight-text" placeholder="Tulis insight yang kamu dapat..."></textarea></div>
       <button class="btn-primary" onclick="addInsightNote()">+ Simpan Catatan</button>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">🖊️ Catatan Tulisan Tangan</div>
+      <div class="settings-section-desc">Tulis langsung pakai jari atau stylus di tablet-mu.</div>
+      <div class="form-row">
+        <label class="field-label">Sumber</label>
+        <div class="btn-choice-row">
+          <div class="chip" data-group="hwsource" data-val="Podcast" onclick="selectChip(this)">🎧 Podcast</div>
+          <div class="chip" data-group="hwsource" data-val="Artikel" onclick="selectChip(this)">📰 Artikel</div>
+          <div class="chip" data-group="hwsource" data-val="Buku" onclick="selectChip(this)">📖 Buku</div>
+          <div class="chip" data-group="hwsource" data-val="Lainnya" onclick="selectChip(this)">✨ Lainnya</div>
+        </div>
+      </div>
+      <div class="form-row"><label class="field-label">Judul (opsional)</label><input type="text" id="hw-title" placeholder="Judul singkat"></div>
+      <div class="form-row">
+        <canvas id="handwriting-canvas" width="600" height="360" style="width:100%; max-width:600px; height:auto; aspect-ratio:600/360; border:1.5px solid var(--border); border-radius:14px; background:#fff; touch-action:none; cursor:crosshair;"></canvas>
+      </div>
+      <div class="task-add-row">
+        <button class="btn-secondary" onclick="clearHandwritingCanvas()">🗑️ Bersihkan</button>
+        <button class="btn-primary" onclick="saveHandwritingNote()">+ Simpan Tulisan Tangan</button>
+      </div>
+      <div class="status-text idle" style="margin-top:6px;">Catatan tulisan tangan disimpan di device ini saja (tidak ikut sinkron ke Sheets karena ukurannya).</div>
     </div>
 
     <div class="panel">
@@ -701,6 +735,7 @@ let currentUser = null;
 /* ---- Isi sekali di sini supaya device/browser BARU otomatis tersambung tanpa perlu buka Pengaturan ---- */
 const DEFAULT_SYNC_URL = '';         // tempel Web App URL Apps Script kamu di sini
 const DEFAULT_GOOGLE_CLIENT_ID = ''; // tempel Google Client ID kamu di sini (opsional)
+const DEFAULT_OD_PLANNER_URL = 'https://docs.google.com/spreadsheets/d/1Y4okept6ADvk-KZVU8qgkBkTaCvH8dwkhDVSYaOnTuQ/edit?gid=1094839680'; // sheet OD Planner (anyone with link)
 
 let selectedDate = new Date().toISOString().slice(0,10);
 function todayStr(){ return new Date().toISOString().slice(0,10); }
@@ -718,7 +753,7 @@ let gisTokenClient = null;
 let lastFetchedEvents = null;
 
 let todoDropdownOpen = true;
-let plannerSheetTasks = null;
+let odPlannerTasks = null;
 
 const DEFAULT_TARGETS = { calories:2000, protein:120, carbs:250, fat:70, fiber:30, steps:8000, sleep:8 };
 const PREDEFINED_HABITS = [
@@ -762,8 +797,8 @@ function removeManualTask(id){
 function dailyTaskTargetStats(dateStr){
   const manual = loadManualTasks().filter(t=>t.due===dateStr);
   const doneManual = manual.filter(t=>t.done).length;
-  const planner = (plannerSheetTasks||[]).filter(t=>t.dueDate && String(t.dueDate).slice(0,10)===dateStr);
-  const donePlanner = planner.filter(t=>t.status==='completed').length;
+  const planner = (odPlannerTasks||[]).filter(t=>t.deadline===dateStr);
+  const donePlanner = planner.filter(t=>t.status==='Done').length;
   return { done: doneManual+donePlanner, total: manual.length+planner.length };
 }
 
@@ -785,10 +820,68 @@ function addInsightNote(){
   document.querySelectorAll('#screen-notes .chip.selected').forEach(el=>el.classList.remove('selected'));
   renderNotesList();
 }
+
+/* ---------------- Handwriting notes (local-only, canvas) ---------------- */
+let drawCanvas = null, drawCtx = null, isDrawing = false;
+function loadHandwritingNotes(){
+  try{ return JSON.parse(localStorage.getItem(userKey('handwriting_notes')) || '[]'); }catch(e){ return []; }
+}
+function saveHandwritingNotesLocal(list){ localStorage.setItem(userKey('handwriting_notes'), JSON.stringify(list)); }
+function initDrawCanvas(){
+  drawCanvas = document.getElementById('handwriting-canvas');
+  if(!drawCanvas) return;
+  drawCtx = drawCanvas.getContext('2d');
+  drawCtx.lineWidth = 2.5;
+  drawCtx.lineCap = 'round';
+  drawCtx.lineJoin = 'round';
+  drawCtx.strokeStyle = '#1E1B2E';
+  clearHandwritingCanvas();
+
+  const getPos = (evt)=>{
+    const rect = drawCanvas.getBoundingClientRect();
+    const scaleX = drawCanvas.width / rect.width;
+    const scaleY = drawCanvas.height / rect.height;
+    return { x:(evt.clientX-rect.left)*scaleX, y:(evt.clientY-rect.top)*scaleY };
+  };
+  drawCanvas.onpointerdown = (evt)=>{
+    isDrawing = true;
+    const p = getPos(evt);
+    drawCtx.beginPath();
+    drawCtx.moveTo(p.x, p.y);
+    evt.preventDefault();
+  };
+  drawCanvas.onpointermove = (evt)=>{
+    if(!isDrawing) return;
+    const p = getPos(evt);
+    drawCtx.lineTo(p.x, p.y);
+    drawCtx.stroke();
+    evt.preventDefault();
+  };
+  window.onpointerup = ()=>{ isDrawing = false; };
+}
+function clearHandwritingCanvas(){
+  if(!drawCtx || !drawCanvas) return;
+  drawCtx.fillStyle = '#FFFFFF';
+  drawCtx.fillRect(0,0,drawCanvas.width,drawCanvas.height);
+}
+function saveHandwritingNote(){
+  if(!drawCanvas) return;
+  const source = getChipVal('hwsource') || 'Lainnya';
+  const title = document.getElementById('hw-title').value.trim();
+  const image = drawCanvas.toDataURL('image/jpeg', 0.7);
+  const list = loadHandwritingNotes();
+  list.push({ id:'h'+Date.now()+Math.random().toString(36).slice(2,6), date: todayStr(), source, title, image });
+  saveHandwritingNotesLocal(list);
+  document.getElementById('hw-title').value = '';
+  document.querySelectorAll('#screen-notes .chip[data-group="hwsource"].selected').forEach(el=>el.classList.remove('selected'));
+  clearHandwritingCanvas();
+  renderNotesList();
+}
 function showNotes(){
   hideAllScreens();
   document.getElementById('screen-notes').classList.remove('hidden');
   renderNotesList();
+  initDrawCanvas();
 }
 function renderNotesList(){
   const el = document.getElementById('notes-list-content');
@@ -800,6 +893,12 @@ function renderNotesList(){
     icon: insightIcon[n.source] || '✨',
     title: `${n.source}${n.title ? ': '+n.title : ''}`,
     text: n.text
+  }));
+  const handwritten = loadHandwritingNotes().map(n=>({
+    date: n.date,
+    icon: '🖊️',
+    title: `Tulisan tangan${n.source && n.source!=='Lainnya' ? ' · '+n.source : ''}${n.title ? ': '+n.title : ''}`,
+    image: n.image
   }));
 
   const otherNotes = [];
@@ -819,7 +918,7 @@ function renderNotesList(){
     }
   });
 
-  const all = [...insights, ...otherNotes].sort((a,b)=> b.date.localeCompare(a.date));
+  const all = [...insights, ...handwritten, ...otherNotes].sort((a,b)=> b.date.localeCompare(a.date));
   if(all.length===0){
     el.innerHTML = `<div class="task-empty">Belum ada catatan. Mulai tulis insight pertamamu di atas, atau catatan akan otomatis muncul di sini setiap kamu menulis refleksi, catatan makanan, mood, atau kebiasaan.</div>`;
     return;
@@ -831,7 +930,7 @@ function renderNotesList(){
       <div class="reco-icon" style="background:var(--card-green-a);">${n.icon}</div>
       <div style="flex:1;">
         <div class="reco-head"><div class="reco-title">${n.title}</div><div class="reco-tag" style="background:var(--card-purple-a); color:var(--purple-dot);">${dateLabel}</div></div>
-        <div class="reco-text">${n.text}</div>
+        ${n.image ? `<img src="${n.image}" style="max-width:100%; border-radius:10px; border:1px solid var(--border); margin-top:6px;">` : `<div class="reco-text">${n.text}</div>`}
       </div>
     </div>`;
   }).join('');
@@ -1002,17 +1101,50 @@ async function syncManualTasksAndInsights(){
   syncSaveKV('manual_tasks', loadManualTasks());
   syncSaveKV('insights', loadInsights());
 }
-async function fetchPlannerSheetTasks(){
-  const url = getSyncUrl();
-  if(!url || !currentUser){ plannerSheetTasks = []; return; }
-  plannerSheetTasks = null;
+function getOdPlannerUrl(){ return localStorage.getItem('personalos_od_planner_url') || DEFAULT_OD_PLANNER_URL; }
+function setOdPlannerUrl(url){ localStorage.setItem('personalos_od_planner_url', url.trim()); }
+function parseSheetIdAndGid(url){
+  const idMatch = (url||'').match(/\/d\/([a-zA-Z0-9-_]+)/);
+  const gidMatch = (url||'').match(/gid=([0-9]+)/);
+  return { id: idMatch ? idMatch[1] : null, gid: gidMatch ? gidMatch[1] : '0' };
+}
+function parseGvizDate(v){
+  if(typeof v === 'string' && v.indexOf('Date(')===0){
+    const parts = v.slice(5,-1).split(',').map(Number);
+    return new Date(parts[0], parts[1], parts[2]).toISOString().slice(0,10);
+  }
+  return v ? String(v).slice(0,10) : null;
+}
+async function fetchOdPlannerTasks(){
+  const { id, gid } = parseSheetIdAndGid(getOdPlannerUrl());
+  if(!id || !currentUser){ odPlannerTasks = []; renderTodoPanel(); return; }
+  odPlannerTasks = null;
   renderTodoPanel();
   try{
-    const res = await fetch(`${url}?action=load_planner_tasks&user=${encodeURIComponent(currentUser)}`);
-    const data = await res.json();
-    plannerSheetTasks = data.tasks || [];
+    const res = await fetch(`https://docs.google.com/spreadsheets/d/${id}/gviz/tq?tqx=out:json&gid=${gid}`);
+    const text = await res.text();
+    const jsonStr = text.substring(text.indexOf('{'), text.lastIndexOf('}')+1);
+    const data = JSON.parse(jsonStr);
+    const cols = data.table.cols.map(c=> (c.label || c.id || '').toString().toLowerCase().trim());
+    const rows = data.table.rows || [];
+    const idx = (name)=> cols.indexOf(name);
+    const iId = idx('id'), iTask = idx('task'), iPic = idx('pic'), iStatus = idx('status'), iDeadline = idx('deadline'), iPrioritas = idx('prioritas');
+    const nameLower = currentUser.trim().toLowerCase();
+    odPlannerTasks = rows.map(r=>{
+      const c = r.c || [];
+      const get = (i)=> (i>=0 && c[i] && c[i].v!=null) ? c[i].v : '';
+      return {
+        id: get(iId), task: get(iTask), pic: get(iPic),
+        status: get(iStatus), prioritas: get(iPrioritas),
+        deadline: parseGvizDate(get(iDeadline))
+      };
+    }).filter(t=>{
+      if(!t.task) return false;
+      const pic = String(t.pic).toLowerCase();
+      return pic.indexOf(nameLower)>=0 || nameLower.indexOf(pic)>=0;
+    });
   }catch(err){
-    plannerSheetTasks = [];
+    odPlannerTasks = [];
   }
   renderTodoPanel();
 }
@@ -1573,20 +1705,21 @@ function renderTodoPanel(){
     `).join('') + `</div>`;
   }
 
-  html += `<div class="hero-section-label">MICROSOFT PLANNER (via Power Automate)</div>`;
-  const openPlanner = (plannerSheetTasks||[]).filter(t=>t.status!=='completed');
-  if(!getSyncUrl()){
-    html += `<div class="task-empty">Sinkronisasi Sheets belum diatur. <span class="btn-ghost" style="cursor:pointer;" onclick="showSettings()">Atur di Pengaturan</span></div>`;
-  } else if(plannerSheetTasks===null){
+  html += `<div class="hero-section-label">OD PLANNER</div>`;
+  const openPlanner = (odPlannerTasks||[]).filter(t=>t.status!=='Done');
+  const { id: odId } = parseSheetIdAndGid(getOdPlannerUrl());
+  if(!odId){
+    html += `<div class="task-empty">Sheet OD Planner belum diatur. <span class="btn-ghost" style="cursor:pointer;" onclick="showSettings()">Atur di Pengaturan</span></div>`;
+  } else if(odPlannerTasks===null){
     html += `<div class="task-empty">Memuat task...</div>`;
   } else if(openPlanner.length===0){
-    html += `<div class="task-empty">Tidak ada task terbuka dari Planner saat ini.</div>`;
+    html += `<div class="task-empty">Tidak ada task terbuka atas namamu di OD Planner saat ini.</div>`;
   } else {
-    const sorted = sortByDue(openPlanner.map(t=>({ ...t, due: t.dueDate ? String(t.dueDate).slice(0,10) : null })));
+    const sorted = sortByDue(openPlanner.map(t=>({ ...t, due: t.deadline || null })));
     html += `<div class="task-list">` + sorted.map(t=>`
       <div class="task-item">
         <div class="task-checkbox" style="cursor:default;"></div>
-        <div class="task-text">${t.title}${dueBadge(t.due)}</div>
+        <div class="task-text">${t.task}${t.prioritas ? ` <span class="due-badge due-future">${t.prioritas}</span>` : ''}${dueBadge(t.due)}</div>
       </div>
     `).join('') + `</div>`;
   }
@@ -1655,12 +1788,19 @@ function showSettings(){
   document.getElementById('screen-settings').classList.remove('hidden');
   document.getElementById('settings-sync-url').value = getSyncUrl();
   document.getElementById('settings-google-clientid').value = getGoogleClientId();
+  document.getElementById('settings-od-planner-url').value = getOdPlannerUrl();
   updateSyncStatusText();
   updateCalendarStatusText();
 }
 function saveSyncUrlSetting(){
   setSyncUrl(document.getElementById('settings-sync-url').value);
   updateSyncStatusText('URL disimpan.');
+}
+function saveOdPlannerUrlSetting(){
+  setOdPlannerUrl(document.getElementById('settings-od-planner-url').value);
+  const el = document.getElementById('od-planner-status');
+  if(el){ el.textContent = 'URL disimpan.'; el.className = 'status-text ok'; }
+  fetchOdPlannerTasks();
 }
 function updateSyncStatusText(msg){
   const el = document.getElementById('sync-status');
@@ -1699,7 +1839,7 @@ function goToDashboard(){
   document.getElementById('dash-name').textContent = currentUser;
   document.getElementById('dashboard-date-picker').value = selectedDate;
   document.getElementById('avatar-initial').textContent = currentUser.trim().charAt(0).toUpperCase();
-  fetchPlannerSheetTasks();
+  fetchOdPlannerTasks();
   renderDashboard();
 }
 function changeDashboardDate(val){
