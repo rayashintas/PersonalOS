@@ -286,7 +286,7 @@
     <div class="auth-sub">To-do &amp; kalender di pagi hari. Nutrisi, aktivitas, kebiasaan &amp; mood di malam hari.</div>
     <label class="field-label" for="login-name">Nama kamu</label>
     <input type="text" id="login-name" placeholder="mis. Raya" />
-    <button class="btn-primary full-width" onclick="handleLogin()">Masuk</button>
+    <button class="btn-primary full-width" id="login-btn" onclick="handleLogin()">Masuk</button>
     <div style="margin-top:14px; font-size:12px; color:var(--text-faint);">Data disimpan di browser ini per nama pengguna, dan bisa disinkron ke Google Sheets lewat Pengaturan.</div>
   </div>
 </div>
@@ -1293,13 +1293,19 @@ function renderCalendarDashboard(){
 }
 
 /* ---------------- Login ---------------- */
-function handleLogin(){
+async function handleLogin(){
   const name = document.getElementById('login-name').value.trim();
   if(!name){ alert('Isi nama dulu ya'); return; }
   currentUser = name;
   selectedDate = todayStr();
   localStorage.setItem('personalos_last_user', name);
-  if(getSyncUrl()){ syncLoadAndMerge(); syncManualTasksAndInsights(); }
+  const btn = document.getElementById('login-btn');
+  if(getSyncUrl()){
+    if(btn){ btn.textContent = 'Menarik data kamu...'; btn.disabled = true; }
+    await syncLoadAndMerge();
+    await syncManualTasksAndInsights();
+    if(btn){ btn.textContent = 'Masuk'; btn.disabled = false; }
+  }
   autoConnectGoogleCalendar();
   showChoice();
 }
